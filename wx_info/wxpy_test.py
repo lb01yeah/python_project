@@ -1,8 +1,12 @@
+# coding=utf-8
 import re
 from wxpy import *
 import numpy
 import pandas as pd
 import matplotlib.pyplot as plt
+import jieba
+from scipy.misc import imread
+from wordcloud import WordCloud, ImageColorGenerator
 # 参考https://blog.csdn.net/yaoyefengchen/article/details/79427475
 def login():
     bot = Bot(cache_path=None)
@@ -14,13 +18,13 @@ def login():
 #myself = bot.self
 
 # 向文件传输助手发送消息1111
-bot.file_helper.send('Hello from wxpy!')
+#bot.file_helper.send('Hello from wxpy!')
 
 
 #统计好友男女比例
 def show_sex_ratio(friends):
     sex_dict = {'male': 0, 'female': 0}
-    for frient in my_friends:
+    for frient in friends:
         if frient.sex == 1:
             sex_dict['male'] += 1
         elif frient.sex == 2:
@@ -62,9 +66,66 @@ def show_area_distribution(friends):
 
     print(data)
 
-#统计好友签名
+
 def show_signature(friends):
+    # 统计好友签名
     for friend in friends:
         # 对数据进行清洗，将标点符号等对词频统计造成影响的因素剔除
         pattern = re.compile(r'[一-龥]+')
         filterdata = re.findall(pattern, friend.signature)
+        write_txt_file('signatures.txt', ''.join(filterdata))
+
+    #读取文件
+    content = read_txt_file('signatures.txt')
+    segment = jieba.lcut(content)
+    words_df = pd.DataFrame({'segment':segment})
+
+    #读取stopwords
+    stopwords = pd.read_csv('stopwords.txt', index_col=False,
+                            quoting=3, sep=" ", names=['stopword'], encoding='gb18030')
+    words_df = words_df[~words_df.segment.isin(stopwords.stopword)]
+    print(words_df)
+
+    words_stat = words_df.groupby(by=['segment'])['segment'].agg({"计数": numpy.size})
+    words_stat = words_stat.reset_index().sort_values(by=["计数"], ascending=False)
+
+    # 设置词云属性
+    color_mask = imread('background.jfif')
+    wordcloud = WordCloud(font_path="simhei.ttf",  # 设置字体可以显示中文
+                          background_color="white",  # 背景颜色
+                          max_words=100,  # 词云显示的最大词数
+                          mask=color_mask,  # 设置背景图片
+                          max_font_size=100,  # 字体最大值
+                          random_state=42,
+                          width=1000, height=860, margin=2,
+                          # 设置图片默认的大小,但是如果使用背景图片的话,                                                   # 那么保存的图片大小将会按照其大小保存,margin为词语边缘距离
+                          )
+
+    # 生成词云, 可以用generate输入全部文本,也可以我们计算好词频后使用generate_from_frequencies函数
+    word_frequence = {x[0]: x[1] for x in words_stat.head(100).values}
+    print(word_frequence)
+    word_frequence_dict = {}
+    for key in word_frequence:
+        word_frequence_dict[key] = word_frequence[key]
+
+    wordcloud.generate_from_frequencies(word_frequence_dict)
+    # 从背景图片生成颜色值
+    image_colors = ImageColorGenerator(color_mask)
+    # 重新上色
+    wordcloud.recolor(color_func=image_colors)
+    # 保存图片
+    wordcloud.to_file('output.png')
+    plt.imshow(wordcloud)
+    plt.axis("off")
+    plt.show()
+
+
+def main():
+    friends = login()
+    show_sex_ratio(friends)
+    show_area_distribution(friends)
+    show_signature(friends)
+
+
+if __name__ == '__main__':
+    main()
