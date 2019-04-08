@@ -1,4 +1,4 @@
 # python_project
-python learn
-numpy
-pandas
+python learn  
+numpy  
+pandas  
